@@ -4,14 +4,12 @@ import br.com.dwnl.marketplace.registration.domain.Customer;
 import br.com.dwnl.marketplace.registration.domain.CustomerId;
 import br.com.dwnl.marketplace.registration.domain.CustomerRepository;
 import br.com.dwnl.marketplace.registration.infrastructure.persistence.entity.CustomerEntity;
-import br.com.dwnl.marketplace.registration.infrastructure.persistence.entity.CustomerEntityRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.StreamSupport;
 
-import static java.util.Arrays.stream;
 
 @Repository
 public class JpaCustomerRepository implements CustomerRepository {
@@ -24,8 +22,8 @@ public class JpaCustomerRepository implements CustomerRepository {
     @Override
     public Customer save(Customer customer) {
         var entity = convert(customer);
-        repository.save(entity);
-        return customer;
+        var savedEntity = repository.save(entity);
+        return mapper(savedEntity);
     }
 
     @Override
