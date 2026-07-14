@@ -9,12 +9,12 @@ import org.springframework.boot.jpa.autoconfigure.JpaProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.data.mongodb.config.EnableMongoAuditing;
+import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 import org.springframework.transaction.PlatformTransactionManager;
-
-import javax.sql.DataSource;
 
 @Configuration(proxyBeanMethods = false)
 @EnableJpaRepositories(
@@ -22,6 +22,8 @@ import javax.sql.DataSource;
         entityManagerFactoryRef = "catalogEntityManagerFactory",
         transactionManagerRef = "catalogTransactionManager"
 )
+@EnableMongoRepositories
+@EnableMongoAuditing
 public class CatalogConfiguration {
 
     @Bean
