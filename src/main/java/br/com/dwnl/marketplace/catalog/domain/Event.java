@@ -1,6 +1,5 @@
 package br.com.dwnl.marketplace.catalog.domain;
 
-import br.com.dwnl.marketplace.catalog.infrastructure.persistence.entity.EventMetadataEntity;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -13,9 +12,9 @@ public class Event {
     private EventId id;
     private String title;
     private Instant date;
-    private Optional<EventMetadataEntity> metadata;
+    private Optional<EventMetadata> metadata;
 
-    public Event(EventId id, String title, Instant data, Optional<EventMetadataEntity> metadata){
+    public Event(EventId id, String title, Instant data, Optional<EventMetadata> metadata){
         this.id = id;
         this.title = title;
         this.date = data;
