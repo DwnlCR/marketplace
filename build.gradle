@@ -39,6 +39,9 @@ dependencies {
     implementation 'org.springframework.data:spring-data-rest-hal-explorer'
 
     implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'redis.clients:jedis'
 }
 
 tasks.named('test') {

@@ -17,7 +17,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document
 @Data
-@RequiredArgsConstructor
+@AllArgsConstructor
+@NoArgsConstructor
 public class EventMetadataEntity {
 
     @Id

@@ -1,9 +1,11 @@
 package br.com.dwnl.marketplace.registration.infrastructure.persistence.repository;
 
+import br.com.dwnl.marketplace.common.infrastructure.event.dto.CustomerCreated;
 import br.com.dwnl.marketplace.registration.domain.Customer;
 import br.com.dwnl.marketplace.registration.domain.CustomerId;
 import br.com.dwnl.marketplace.registration.domain.CustomerRepository;
 import br.com.dwnl.marketplace.registration.infrastructure.persistence.entity.CustomerEntity;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -14,15 +16,20 @@ import java.util.stream.StreamSupport;
 @Repository
 public class JpaCustomerRepository implements CustomerRepository {
     private final CustomerEntityRepository repository;
+    private final ApplicationEventPublisher publisher;
 
-    public JpaCustomerRepository(CustomerEntityRepository repository){
+    public JpaCustomerRepository(CustomerEntityRepository repository, ApplicationEventPublisher publisher){
         this.repository = repository;
+        this.publisher = publisher;
     }
 
     @Override
     public Customer save(Customer customer) {
         var entity = convert(customer);
         var savedEntity = repository.save(entity);
+
+        publisher.publishEvent(new CustomerCreated(customer.getId().id().toString(), customer.getName()));
+
         return mapper(savedEntity);
     }
 

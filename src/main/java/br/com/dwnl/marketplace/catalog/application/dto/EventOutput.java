@@ -3,21 +3,22 @@ package br.com.dwnl.marketplace.catalog.application.dto;
 import br.com.dwnl.marketplace.catalog.domain.Event;
 import br.com.dwnl.marketplace.catalog.domain.EventMetadata;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public record EventOutput(String id, String title, Instant date, EventMetadataOutput metadata) {
+public record EventOutput(String id, String title, Instant date, EventMetadataOutput metadata) implements Serializable {
 
     public record EventMetadataOutput(String eventDescription,
                                       Map<String, Object> technicalRequirements,
-                                      Map<String, List<SeatOutput>> seatsBySector) {
+                                      Map<String, List<SeatOutput>> seatsBySector) implements Serializable{
 
         public record SeatOutput(String id,
                                  String sectorId,
-                                 BigDecimal price) {
+                                 BigDecimal price) implements Serializable{
         }
 
         public static EventMetadataOutput from(EventMetadata metadata) {
