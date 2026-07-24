@@ -1,4 +1,4 @@
-package br.com.dwnl.marketplace.registration;
+package br.com.dwnl.marketplace.registration.infrastructure;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.boot.context.properties.ConfigurationProperties;
