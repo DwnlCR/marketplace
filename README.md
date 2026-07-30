@@ -1,19 +1,32 @@
 # Marketplace
  
-Plataforma event-driven de marketplace de eventos desenvolvida em Java com Spring Boot 3.5.0, multi-datasource persistence e comunicação assíncrona entre bounded contexts via eventos de domínio.
+Plataforma event-driven de marketplace de eventos desenvolvida em Java com Spring Boot 3.5.0, multi-datasource persistence, caching distribuído e sistema de seat locking com Redis.
  
 ## Funcionalidades
  
 Interface REST para navegação e gerenciamento de eventos
 Registro de clientes com publicação de eventos de domínio
 Catálogo de eventos com metadados (setores, assentos, preços)
+Seleção de assentos com locking otimista distribuído
+Validação de assentos disponíveis em tempo real
 Caching em camadas com Redis (padrão cache-aside)
-Armazenamento de eventos em MySQL e metadados em MongoDB
-Validação em tempo real de dados de entrada
+Armazenamento de eventos em múltiplos bancos de dados
 Enriquecimento assíncrono de eventos com metadados
 Publicação de eventos entre bounded contexts
 Consumo assíncrono de eventos com EventListener
-Descoberta de padrões via Spring Data repositories
+ 
+## Arquitetura
+ 
+Três bounded contexts independentes com comunicação event-driven:
+ 
+Registration Context
+Gerencia cadastro e autenticação de clientes. Publica evento CustomerCreated quando um novo cliente é criado. Utiliza MySQL como banco de dados (porta 3307).
+ 
+Catalog Context
+Gerencia eventos e seus metadados (setores, assentos, preços). Armazena eventos em MySQL (porta 3308) e metadados em MongoDB (porta 27018). Implementa cache-aside pattern com Redis (porta 6380). Publica evento EventUpdated quando metadados são alterados.
+ 
+Ticketing Context
+Consome eventos de Registration e Catalog. Implementa seleção de assentos com locking otimista via Redis (porta 6381). Persiste eventos em PostgreSQL (porta 5433). Valida disponibilidade de assentos e controla reservas concorrentes.
  
 ## Estrutura do Projeto
  
@@ -29,109 +42,86 @@ marketplace/
 |   |   └── dto/
 |   |       └── EventOutput.java
 |   ├── domain/
-|   |   ├── Event.java
-|   |   ├── EventMetadata.java
-|   |   ├── EventRepository.java
-|   |   └── EventMetadataRepository.java
 |   └── infrastructure/
 |       ├── persistence/
-|       |   ├── entity/
-|       |   |   ├── EventEntity.java
-|       |   |   └── EventMetadataEntity.java
-|       |   └── repository/
-|       |       ├── JpaEventRepository.java
-|       |       ├── MongoEventMetadataRepository.java
-|       |       └── *EntityRepository.java
 |       ├── event/
-|       |   ├── EventListener.java
-|       |   └── EventMetadataEventListener.java
 |       ├── http/
-|       |   └── ShowCaseController.java
 |       └── CatalogConfiguration.java
 |
 ├── registration/
 |   ├── application/
 |   ├── domain/
-|   |   ├── Customer.java
-|   |   ├── CustomerRepository.java
-|   |   └── CustomerId.java
 |   └── infrastructure/
 |       ├── persistence/
-|       |   ├── entity/
-|       |   |   └── CustomerEntity.java
-|       |   └── repository/
-|       |       ├── JpaCustomerRepository.java
-|       |       └── CustomerEntityRepository.java
-|       └── event/
-|           └── CustomerEventHandler.java
+|       ├── event/
+|       └── RegistrationConfiguration.java
 |
 ├── ticketing/
-|   └── infrastructure/
-|       └── event/
-|           └── TicketingEventListener.java
+|   ├── application/
+|   |   ├── CreateCustomerUseCase.java
+|   |   ├── CreateEventUseCase.java
+|   |   └── SelectSeatUseCase.java
+|   ├── domain/
+|   |   ├── Customer.java
+|   |   ├── Event.java
+|   |   ├── Seat.java
+|   |   ├── Sector.java
+|   |   ├── EventRepository.java
+|   |   └── *Exception.java
+|   ├── infrastructure/
+|   |   ├── persistence/
+|   |   |   ├── entity/
+|   |   |   |   ├── EventEntity.java
+|   |   |   |   ├── SeatEntity.java
+|   |   |   |   └── SeatLockEntity.java
+|   |   |   └── repository/
+|   |   |       ├── WorkOfUnitEventRepository.java
+|   |   |       ├── RedisSeatLockRepository.java
+|   |   |       └── *CrudRepository.java
+|   |   ├── event/
+|   |   ├── http/
+|   |   |   ├── SeatSelectionController.java
+|   |   |   └── request/
+|   |   └── TicketingConfiguration.java
 |
 ├── common/
 |   └── infrastructure/
 |       └── event/
 |           └── dto/
-|               ├── CustomerCreated.java
-|               └── EventUpdated.java
 |
 └── MarketplaceApplication.java
 ```
  
-## Bounded Contexts
- 
-### Registration
- 
-Gerencia cadastro e autenticação de clientes. Responsável por validar dados de entrada, armazenar cliente em banco de dados e publicar evento CustomerCreated quando um novo cliente é criado. Utiliza MySQL como banco de dados relacional (porta 3307).
- 
-### Catalog
- 
-Gerencia eventos e seus metadados (setores, assentos, preços). Armazena eventos em MySQL (porta 3308) e metadados em MongoDB (porta 27018). Implementa cache-aside pattern com Redis (porta 6380) para otimizar leituras. Publica evento EventUpdated quando metadados são alterados.
- 
-### Ticketing
- 
-Consome eventos publicados por outros bounded contexts. Escuta CustomerCreated para criar conta de venda e EventUpdated para atualizar disponibilidade de ingressos. Processa eventos assincronamente com suporte a @Async.
- 
 ## Padrões e Decisões de Design
  
-| Conceito | Aplicacao |
-|----------|-----------|
-| Arquitetura Hexagonal | Model (domain/), Service (application/), Infrastructure (infrastructure/) |
-| Bounded Contexts | Separação clara de domínios de negócio com linguagem ubíqua |
-| Event-Driven | Comunicação assíncrona via ApplicationEventPublisher entre contextos |
-| Cache-Aside | Leitura do cache ou banco de dados; invalidação em operações de escrita |
-| Observer | NotifierService notifica listeners em eventos de cache |
-| Multi-Datasource | Suporte a múltiplos bancos: MySQL (Registration/Catalog), MongoDB (Metadata), Redis (Cache) |
-| Spring Data JPA | GamePatternRepository abstrai acesso ao banco de padrões |
-| Serializable Records | Suporte a persistência em Redis de EventOutput, EventMetadataOutput, SeatOutput |
+Conceito | Aplicação
+---------|----------
+Arquitetura Hexagonal | Model (domain/), Service (application/), Infrastructure (infrastructure/)
+Bounded Contexts | Separação clara de domínios: Registration, Catalog, Ticketing
+Event-Driven | Comunicação assíncrona via ApplicationEventPublisher entre contextos
+Cache-Aside | Leitura do cache ou banco; invalidação em operações de escrita
+Optimistic Locking | Uso de Redis para lock transiente de assentos (30s TTL)
+Work of Unit Pattern | Transação distribuída entre PostgreSQL e Redis para seat selection
+Multi-Datasource | MySQL (Registration/Catalog), MongoDB (Metadata), PostgreSQL (Ticketing), Redis (Cache/Locks)
  
 ## Tecnologias
  
-| Tecnologia | Versao | Uso |
-|-----------|--------|-----|
-| Java | 21 | Linguagem principal com Virtual Threads |
-| Spring Boot | 3.5.0 | Framework principal e injeção de dependência |
-| Spring Data JPA | 3.5.0 | Acesso a MySQL via repositório |
-| Spring Data MongoDB | 3.5.0 | Persistência de metadados em MongoDB |
-| Spring Data Redis | 3.5.0 | Caching distribuído em Redis |
-| MySQL | 8.0 | Banco relacional para Registration e Catalog |
-| MongoDB | 8.2 | Armazenamento de metadados de eventos |
-| Redis | 7-alpine | Caching com TTL de 1 hora |
-| Lombok | 1.18 | Redução de boilerplate em entidades |
-| Docker Compose | latest | Orquestração de containers |
-| Gradle | 8.x | Build tool |
+Tecnologia | Versão | Uso
+-----------|--------|----
+Java | 21 | Linguagem principal com Virtual Threads
+Spring Boot | 3.5.0 | Framework principal
+Spring Data JPA | 3.5.0 | Acesso a MySQL e PostgreSQL
+Spring Data MongoDB | 3.5.0 | Persistência de metadados
+Spring Data Redis | 3.5.0 | Caching e locking distribuído
+MySQL | 8.0 | Banco relacional Registration e Catalog
+MongoDB | 8.2 | Armazenamento de metadados de eventos
+PostgreSQL | 18.3 | Banco relacional para Ticketing
+Redis | 7-alpine | Caching e seat locking (2 instâncias)
+Lombok | 1.18 | Redução de boilerplate
+Docker Compose | latest | Orquestração de containers
+Gradle | 8.x | Build tool
  
 ## Como Executar
- 
-### Pré-requisitos
- 
-Java 21 ou superior
-Docker e Docker Compose instalados
-Git
- 
-### Configuração
  
 Clone o repositório:
  
@@ -140,7 +130,7 @@ git clone https://github.com/DwnlCR/marketplace.git
 cd marketplace
 ```
  
-Configure as credenciais do banco em application.properties:
+Configure as credenciais dos bancos em application.properties:
  
 ```properties
 # Registration Database (MySQL)
@@ -153,18 +143,25 @@ catalog.datasource.url=jdbc:mysql://localhost:3308/catalog
 catalog.datasource.username=app
 catalog.datasource.password=app
  
+# Ticketing Database (PostgreSQL)
+ticketing.datasource.url=jdbc:postgresql://localhost:5433/ticketing
+ticketing.datasource.username=app
+ticketing.datasource.password=app
+ 
 # MongoDB
 spring.mongodb.representation.uuid=standard
  
-# Redis
-spring.redis.host=localhost
-spring.redis.port=6380
+# Redis Catalog Cache
+catalog.redis.host=localhost
+catalog.redis.port=6380
 spring.cache.redis.time-to-live=3600000
+ 
+# Redis Ticketing Locking
+ticketing.redis.host=localhost
+ticketing.redis.port=6381
 ```
  
-### Executando a Aplicação
- 
-Inicie os containers (MySQL, MongoDB, Redis):
+Inicie os containers (MySQL, PostgreSQL, MongoDB, Redis):
  
 ```bash
 docker-compose up -d
@@ -179,12 +176,6 @@ Compile e execute a aplicação:
  
 A aplicação estará disponível em: http://localhost:8080
  
-Verifique a saúde da aplicação:
- 
-```bash
-curl http://localhost:8080/actuator/health
-```
- 
 ## Endpoints
  
 ### Catalog
@@ -195,27 +186,21 @@ Navegar catálogo (com cache):
 GET /showcase
 ```
  
-Resposta esperada:
+### Ticketing
  
-```json
-[
-  {
-    "id": "123e4567-e89b-12d3-a456-426614174000",
-    "title": "Show Skank",
-    "date": "2026-07-20T20:00:00Z",
-    "metadata": {
-      "eventDescription": "Clássico Rock",
-      "seatsBySector": {
-        "Pista": [
-          {"id": "A1", "sectorId": "Pista", "price": 100.00}
-        ],
-        "VIP": [
-          {"id": "V1", "sectorId": "VIP", "price": 250.00}
-        ]
-      }
-    }
-  }
-]
+Selecionar assento com locking:
+ 
+```
+POST /ticketing/events/{eventId}/seats/select
+Headers: X-CUSTOMER-ID: {customerId}
+Body: {"id": "{seatId}"}
+```
+ 
+Resposta esperada (201 Created ou erro):
+ 
+```
+SeatNotFoundException - Assento não encontrado
+SeatAlreadyReservedException - Assento já reservado
 ```
  
 ### Health Check
@@ -226,25 +211,17 @@ curl http://localhost:8080/actuator/health
  
 ## Docker Compose
  
-A aplicação utiliza os seguintes serviços Docker:
+A aplicação utiliza os seguintes serviços:
  
 ```yaml
 services:
   registration-database:
     image: mysql:8.0
     ports: ["3307:3306"]
-    environment:
-      MYSQL_DATABASE: registration
-      MYSQL_USER: app
-      MYSQL_PASSWORD: app
  
   catalog-database:
     image: mysql:8.0
     ports: ["3308:3306"]
-    environment:
-      MYSQL_DATABASE: catalog
-      MYSQL_USER: app
-      MYSQL_PASSWORD: app
  
   catalog-metadata-database:
     image: mongo:8.2
@@ -253,11 +230,30 @@ services:
   catalog-cache:
     image: redis:7-alpine
     ports: ["6380:6379"]
+ 
+  ticketing-database:
+    image: postgres:18.3
+    ports: ["5433:5432"]
+ 
+  ticketing-locking:
+    image: redis:7-alpine
+    ports: ["6381:6379"]
 ```
  
-## Monitoramento
+## Seat Locking
  
-### Actuator Endpoints
+O sistema implementa locking otimista para prevenir double-booking de assentos:
+ 
+Fluxo de seleção de assento:
+ 
+1. Cliente faz POST em /ticketing/events/{eventId}/seats/select
+2. SelectSeatUseCase valida se assento existe
+3. WorkOfUnitEventRepository tenta criar lock no Redis (30s TTL)
+4. Se lock foi criado, assento é reservado
+5. Se lock já existe, SeatAlreadyReservedException é lançada
+O lock é armazenado em Redis (porta 6381) de forma independente do cache de catálogo (porta 6380) para evitar contenção.
+ 
+## Monitoramento
  
 Health check:
  
@@ -271,53 +267,30 @@ Metrics:
 curl http://localhost:8080/actuator/metrics
 ```
  
-Info:
- 
-```bash
-curl http://localhost:8080/actuator/info
-```
- 
-### Logs
- 
-Ver logs em tempo real:
+Logs em tempo real:
  
 ```bash
 docker-compose logs -f
 ```
  
-Ver logs de um serviço específico:
- 
-```bash
-docker-compose logs -f catalog-database
-```
- 
 ## Troubleshooting
  
-### Containers não iniciam
+Containers não iniciam:
  
 ```bash
 docker-compose down -v
 docker-compose up -d
 ```
  
-### Porta em uso
- 
-Modifique a porta em application.properties e docker-compose.yml:
- 
-```properties
-spring.redis.port=6381
-```
- 
-### Erro de conexão com Redis
- 
-Teste a conexão com Redis:
+Erro de conexão com PostgreSQL:
  
 ```bash
-docker exec -it marketplace-catalog-cache-1 redis-cli ping
+docker exec -it marketplace-ticketing-database-1 psql -U app -d ticketing -c "SELECT 1"
 ```
  
-## Autor
+Erro de conexão com Redis:
  
-Daniel Coelho Rodrigues
+```bash
+docker exec -it marketplace-ticketing-locking-1 redis-cli ping
+```
  
-GitHub: DwnlCR
